@@ -13,46 +13,47 @@ from strategic_ml.gsc import LinearStrategicDelta
 
 def plot_datasets_and_classifiers(
     datasets: List[Tuple[Tensor, Tensor]],
-    deltas: List[LinearStrategicDelta],
     classifiers: List[Tuple[Tensor, float]],
     save_dir: str,
 ) -> None:
     """
-    Plots multiple 2D datasets, classifiers, and delta-induced transformations.
+    Plots multiple 2D datasets, classifiers, and transformations between datasets.
 
     Parameters:
     - datasets: List of tuples (X, y), where:
         - X: Tensor of shape (n_samples, 2), features of the dataset.
         - y: Tensor of shape (n_samples,) or (n_samples, 1), labels (-1 or 1).
-    - deltas: List of LinearStrategicDelta instances corresponding to datasets.
+        The datasets are ordered such that each point X_i in dataset m + 1 is the transformed
+        version of X_i in dataset m.
+
     - classifiers: List of tuples (w, b), where:
         - w: Tensor of shape (2,), weight vector of the linear classifier.
         - b: float, bias term of the classifier.
-    - save_dir: Directory to save the plot.
+
+    - save_dir: str, directory to save the plot.
 
     The function plots:
     - Datasets with datapoints colored according to labels and dataset index,
       with colors getting darker for subsequent datasets.
     - Linear classifiers as lines, colored in shades of green, darker for each classifier.
-    - Arrows from original datapoints to their delta-transformed points (if they move).
+    - Arrows from each point in dataset m to the corresponding point in dataset m + 1
+      if they are not the same.
 
     Returns:
     - None
     """
     k = len(classifiers)
     assert (
-        len(datasets) == k 
-    ), "Number of datasets must be k where k is the number of classifiers."
-    assert (
-        len(deltas) == k 
-    ), "Number of deltas must be k  where k is the number of classifiers."
+        len(datasets) == k + 1
+    ), "Number of datasets must be k + 1 where k is the number of classifiers."
 
+    # Set up colors for negative labels (reds), positive labels (blues), and classifiers (greens)
     reds_cmap = cm.get_cmap("Reds")
     blues_cmap = cm.get_cmap("Blues")
     greens_cmap = cm.get_cmap("Greens")
 
-    reds = reds_cmap(torch.linspace(0.4, 0.9, k + 1).numpy())  # Light to dark reds, add one for the last transformation
-    blues = blues_cmap(torch.linspace(0.4, 0.9, k + 1).numpy())  # Light to dark blues, add one for the last transformation
+    reds = reds_cmap(torch.linspace(0.4, 0.9, k + 1).numpy())  # Light to dark reds
+    blues = blues_cmap(torch.linspace(0.4, 0.9, k + 1).numpy())  # Light to dark blues
     greens = greens_cmap(
         torch.linspace(0.4, 0.9, k).numpy()
     )  # Light to dark greens for classifiers
@@ -64,8 +65,8 @@ def plot_datasets_and_classifiers(
     x_min, x_max = all_X[:, 0].min().item() - 1, all_X[:, 0].max().item() + 1
     y_min, y_max = all_X[:, 1].min().item() - 1, all_X[:, 1].max().item() + 1
 
-    # Plot datasets and deltas
-    for idx, ((X, y), delta) in enumerate(zip(datasets, deltas)):
+    # Plot datasets
+    for idx, (X, y) in enumerate(datasets):
         color_neg = reds[idx]
         color_pos = blues[idx]
 
@@ -92,21 +93,26 @@ def plot_datasets_and_classifiers(
             alpha=0.6,
         )
 
-        # Apply delta to X
-        # Since we're at the end of the test, we can call delta directly
-        # Assume delta operates as a callable: delta(X, y)
-        X_delta = delta(X, y)
+    # Draw arrows between datasets
+    for m in range(len(datasets) - 1):
+        X_current, _ = datasets[m]
+        X_next, _ = datasets[m + 1]
 
-        # For points where delta changes the point, draw arrows
-        delta_movement = X_delta - X
+        # Ensure that the datasets have the same number of points
+        assert (
+            X_current.shape == X_next.shape
+        ), f"Datasets at index {m} and {m + 1} do not have the same shape."
+
+        delta_movement = X_next - X_current
         deltas_nonzero = torch.any(delta_movement != 0, dim=1)
-        for i in range(len(X)):
+
+        for i in range(len(X_current)):
             if deltas_nonzero[i]:
                 plt.arrow(
-                    X[i, 0].item(),
-                    X[i, 1].item(),  # Starting point (original data point)
+                    X_current[i, 0].item(),
+                    X_current[i, 1].item(),  # Starting point
                     delta_movement[i, 0].item(),
-                    delta_movement[i, 1].item(),  # Delta movement
+                    delta_movement[i, 1].item(),  # Movement
                     head_width=0.05,
                     head_length=0.1,
                     fc="gray",
@@ -114,35 +120,6 @@ def plot_datasets_and_classifiers(
                     alpha=0.5,
                     length_includes_head=True,
                 )
-
-        # If this is the last delta, plot the transformed points
-        if idx == k - 1:
-            color_neg = reds[idx + 1]
-            color_pos = blues[idx + 1]
-
-            # Flatten labels if necessary
-            y_flat = y.view(-1)
-
-            # Plot negative points
-            X_neg = X_delta[y_flat == -1]
-            plt.scatter(
-                X_neg[:, 0].numpy(),
-                X_neg[:, 1].numpy(),
-                color=color_neg,
-                label=f"Dataset {idx} Negative",
-                alpha=0.6,
-            )
-
-            # Plot positive points
-            X_pos = X_delta[y_flat == 1]
-            plt.scatter(
-                X_pos[:, 0].numpy(),
-                X_pos[:, 1].numpy(),
-                color=color_pos,
-                label=f"Dataset {idx} Positive",
-                alpha=0.6,
-            )
-        
 
     # Plot classifiers
     x_vals = torch.linspace(x_min, x_max, 400)
