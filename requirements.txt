@@ -1,0 +1,4 @@
+strategic_ml
+matplotlib
+torch >= 2.1.0
+pytorch-lightning >= 2
