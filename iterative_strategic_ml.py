@@ -18,35 +18,115 @@ import visualization as vis
 def parse_args():
     parser = argparse.ArgumentParser()
     # dataset
-    parser.add_argument("--num_samples", type=int, default=1000)
-    parser.add_argument("--num_features", type=int, default=2)
-    parser.add_argument("--dataset", type=str, default="gaussian")
-    parser.add_argument("--mean_pos", type=float, default=2.0)
-    parser.add_argument("--mean_neg", type=float, default=-2.0)
-    parser.add_argument("--std_dev", type=float, default=1.0)
-    parser.add_argument("--radius", type=float, default=1.0)
-    parser.add_argument("--noise", type=float, default=0.1)
-    parser.add_argument("--val_ratio", type=float, default=0.2)
+    parser.add_argument(
+        "--num_samples", type=int, default=1000, help="Number of samples."
+    )
+    parser.add_argument(
+        "--num_features",
+        type=int,
+        default=2,
+        help="Number of features. Only used for the linear dataset, if you select other dataset don't change it.",
+    )
+    parser.add_argument(
+        "--dataset",
+        type=str,
+        default="gaussian",
+        help="Dataset to use: linear, gaussian, circular, spiral, moons.",
+    )
+    parser.add_argument(
+        "--mean_pos",
+        type=float,
+        default=2.0,
+        help="Mean of the positive cluster for the gaussian dataset.",
+    )
+    parser.add_argument(
+        "--mean_neg",
+        type=float,
+        default=-2.0,
+        help="Mean of the negative cluster for the gaussian dataset.",
+    )
+    parser.add_argument(
+        "--std_dev",
+        type=float,
+        default=1.0,
+        help="Standard deviation of the clusters for the gaussian dataset.",
+    )
+    parser.add_argument(
+        "--radius", type=float, default=1.0, help="Radius of the circular dataset."
+    )
+    parser.add_argument(
+        "--noise",
+        type=float,
+        default=0.1,
+        help="Noise level for the spiral and moons datasets.",
+    )
+    parser.add_argument(
+        "--val_ratio", type=float, default=0.2, help="Validation set ratio."
+    )
     # training
-    parser.add_argument("--max_epochs", type=int, default=100)
-    parser.add_argument("--batch_size", type=int, default=32)
-    parser.add_argument("--lr", type=float, default=0.1)
-    parser.add_argument("--num_workers", type=int, default=0)
+    parser.add_argument(
+        "--max_epochs", type=int, default=100, help="Maximum number of epochs."
+    )
+    parser.add_argument("--batch_size", type=int, default=32, help="Batch size.")
+    parser.add_argument("--lr", type=float, default=0.1, help="Learning rate.")
+    parser.add_argument(
+        "--num_workers",
+        type=int,
+        default=0,
+        help="Number of workers for the dataloaders.",
+    )
     # strategic learning
-    parser.add_argument("--start_cost_weight", type=float, default=1)
-    parser.add_argument("--cost_weight_multiplier", type=float, default=1.5)
-    parser.add_argument("--cost_weight_addend", type=float, default=0)
-    parser.add_argument("--loss_fn", type=str, default="bce")
-    parser.add_argument("--optimizer", type=str, default="adam")
-    parser.add_argument("--linear_regulation_fn", type=str, default="l1")
-    parser.add_argument("--linear_regulation_strength", type=float, default=0.01)
-    parser.add_argument("--elastic_ratio", type=float, default=0.5)
+    parser.add_argument(
+        "--start_cost_weight", type=float, default=1, help="Initial cost weight."
+    )
+    parser.add_argument(
+        "--cost_weight_multiplier",
+        type=float,
+        default=1.5,
+        help="Cost weight multiplier.",
+    )
+    parser.add_argument(
+        "--cost_weight_addend", type=float, default=0, help="Cost weight addend."
+    )
+    parser.add_argument(
+        "--loss_fn", type=str, default="bce", help="Loss function: bce, mse, hinge."
+    )
+    parser.add_argument(
+        "--optimizer", type=str, default="adam", help="Optimizer: sgd, adam, adagrad."
+    )
+    parser.add_argument(
+        "--linear_regulation_fn",
+        type=str,
+        default="l1",
+        help="Linear regulation function: l1, l2, elastic.",
+    )
+    parser.add_argument(
+        "--linear_regulation_strength",
+        type=float,
+        default=0.01,
+        help="Linear regulation strength.",
+    )
+    parser.add_argument(
+        "--elastic_ratio", type=float, default=0.5, help="Elastic net ratio."
+    )
     # other
-    parser.add_argument("--seed", type=int, default=0)
-    parser.add_argument("--num_iterations", type=int, default=10)
-    parser.add_argument("--save_dir", type=str, default="results")
-    parser.add_argument("--plot_fraction", type=float, default=0.1)
-    parser.add_argument("--visualize", action="store_true", default=True)
+    parser.add_argument("--seed", type=int, default=0, help="Random seed.")
+    parser.add_argument(
+        "--num_iterations", type=int, default=10, help="Number of iterations."
+    )
+    parser.add_argument(
+        "--save_dir", type=str, default="results", help="Directory to save the results."
+    )
+    parser.add_argument("--plot_name", type=str, default=None, help="Name of the plot.")
+    parser.add_argument(
+        "--plot_fraction",
+        type=float,
+        default=0.1,
+        help="Fraction of datapoints to plot.",
+    )
+    parser.add_argument(
+        "--visualize", action="store_true", default=True, help="Visualize the results."
+    )
 
     args = parser.parse_args()
     print("args", args)
@@ -151,7 +231,7 @@ def experiment(
     train_dataloader = DataLoader(
         TensorDataset(X_train, y_train),
         batch_size=args.batch_size,
-        shuffle=False,
+        shuffle=True,
         num_workers=args.num_workers,
     )
     validation_dataloader = DataLoader(
@@ -164,7 +244,7 @@ def experiment(
     test_dataloader = train_dataloader
 
     classifiers: List[Tuple[Tensor, float]] = []
-    save_dir = args.save_dir
+    save_dir = os.path.join(args.save_dir, args.dataset)
     os.makedirs(save_dir, exist_ok=True)
     vis_dir = os.path.join(save_dir, "visualizations")
     os.makedirs(vis_dir, exist_ok=True)
@@ -273,7 +353,7 @@ def experiment(
         train_dataloader = DataLoader(
             TensorDataset(X_train, y_train),
             batch_size=args.batch_size,
-            shuffle=False,
+            shuffle=True,
             num_workers=args.num_workers,
         )
         validation_dataloader = DataLoader(
@@ -294,11 +374,21 @@ def experiment(
 
     # Visualize the classifiers
     if args.visualize:
+        if args.plot_name is not None:
+            name = f"{args.plot_name}.png"
+            vis_dir = os.path.join(vis_dir, name)
+        else:
+            name = f"num_iter_{args.num_iterations}_cost_{args.start_cost_weight}_multiplier_{args.cost_weight_multiplier}_add_{args.cost_weight_addend}_dataset_{args.dataset}.png"
+            vis_dir = os.path.join(vis_dir, name)
         vis.plot_datasets_and_classifiers(
             datasets=datasets,
             classifiers=classifiers,
             save_path=vis_dir,
             plot_fraction=args.plot_fraction,
+            cost_start=args.start_cost_weight,
+            cost_multiplier=args.cost_weight_multiplier,
+            cost_add=args.cost_weight_addend,
+            dataset_names=args.dataset,
         )
 
 
