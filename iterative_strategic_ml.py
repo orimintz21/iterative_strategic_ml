@@ -86,7 +86,16 @@ def parse_args():
         help="Standard deviation of the clusters for the gaussian dataset.",
     )
     parser.add_argument(
-        "--radius", type=float, default=1.0, help="Radius of the circular dataset."
+        "--data_radius_multiplier",
+        type=float,
+        default=1.0,
+        help="Radius multiplier for the circular dataset.",
+    )
+    parser.add_argument(
+        "--label_radius",
+        type=float,
+        default=None,
+        help="Radius that indicates where the label is positive.",
     )
     parser.add_argument(
         "--noise",
@@ -219,10 +228,11 @@ def generate_initial_dataset(
             num_samples, mean_pos, mean_neg, std_dev
         )
     elif args.dataset == "circular":
-        if args.radius is not None:
-            X, y = dg.generate_circular_2d_dataset(num_samples, radius=args.radius)
-        else:
-            X, y = dg.generate_circular_2d_dataset(num_samples)
+        X, y = dg.generate_circular_2d_dataset(
+            num_samples,
+            data_radius_mul=args.data_radius_multiplier,
+            label_radius=args.label_radius,
+        )
     elif args.dataset == "spiral":
         if args.noise is not None:
             X, y = dg.generate_spiral_2d_dataset(num_samples, noise=args.noise)
@@ -453,6 +463,7 @@ def experiment(
             name = f"num_iter_{args.num_iterations}_cost_{args.start_cost_weight}_multiplier_{args.cost_weight_multiplier}_add_{args.cost_weight_addend}_dataset_{args.dataset}"
             if args.non_linear:
                 name += f"non_linear_hidden_{args.hidden_size}_temp_{args.non_linear_delta_temp}"
+            name += ".png"
 
         vis_path = os.path.join(vis_dir, name)
         vis.plot_datasets_and_classifiers(

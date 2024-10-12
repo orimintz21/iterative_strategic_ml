@@ -6,24 +6,29 @@ from typing import Tuple, Dict
 
 
 def generate_circular_2d_dataset(
-    num_samples: int, radius: float = 1.0
+    num_samples: int, data_radius_mul: float = 1.0, label_radius: float = 1.0
 ) -> Tuple[Tensor, Tensor]:
     """
     Generates a 2D dataset with a circular decision boundary.
 
     Args:
         num_samples (int): Number of samples to generate.
-        radius (float, optional): Radius of the circle defining the decision boundary. Defaults to 1.0.
+        data_radius_mul (float, optional): Multiplier for the radius of the circle defining the data. Defaults to 1.0.
+        label_radius (float, optional): Radius of the circle defining the decision boundary. Defaults to 1.0.
 
     Returns:
         Tuple[Tensor, Tensor]: Features tensor of shape (num_samples, 2) and labels tensor of shape (num_samples, 1).
     """
     # Generate random 2D points
     X = torch.randn(num_samples, 2)
+    # Increase the radius of the circle
+    X *= data_radius_mul
     # Compute distance from origin
     radius_squared = X[:, 0] ** 2 + X[:, 1] ** 2
     # Labels: +1 if outside the circle, else -1
-    y = torch.where(radius_squared > radius**2, torch.tensor(1.0), torch.tensor(-1.0))
+    y = torch.where(
+        radius_squared > label_radius**2, torch.tensor(1.0), torch.tensor(-1.0)
+    )
     y = y.view(-1, 1)
     return X, y
 
