@@ -107,7 +107,7 @@ def plot_datasets_and_classifiers(
     # Wrapping the title
     full_title = (
         f"{len(datasets) - 1} Iterative Strategic Classification on {dataset_names} Dataset\n"
-        f"Cost: {cost_multiplier}^i * {cost_start} + i * {cost_add}"
+        f"Cost: Start={cost_start}, Multiplier={cost_multiplier}, Add={cost_add}"
     )
     wrapped_title = "\n".join(textwrap.wrap(full_title, width=title_width))
     ax.set_title(wrapped_title, fontsize=20, loc="center")  # Larger title
