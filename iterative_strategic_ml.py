@@ -43,9 +43,14 @@ def parse_args():
     parser.add_argument("--elastic_ratio", type=float, default=0.5)
     # other
     parser.add_argument("--seed", type=int, default=0)
+    parser.add_argument("--num_iterations", type=int, default=10)
     parser.add_argument("--save_dir", type=str, default="results")
+    parser.add_argument("--plot_fraction", type=float, default=0.1)
+    parser.add_argument("--visualize", action="store_true", default=True)
 
-    return parser.parse_args()
+    args = parser.parse_args()
+    print("args", args)
+    return args
 
 
 class BCEWithLogitsLossPMOne(nn.Module):
@@ -131,7 +136,10 @@ def split_train_val_test(
 def experiment(
     args: argparse.Namespace,
 ):
-
+    if args.visualize:
+        assert (
+            args.num_features == 2
+        ), "Visualization is only supported for 2D datasets."
     # Set random seed
     seed = args.seed
     torch.manual_seed(seed)
@@ -238,26 +246,30 @@ def experiment(
 
     logging_dir = os.path.join(save_dir, "logs")
 
-    trainer = pl.Trainer(
-        max_epochs=args.max_epochs,
-        logger=CSVLogger(
-            logging_dir,
-            name=f"iter{0}",
-        ),
-    )
-
     for iteration in range(args.num_iterations):
+        trainer = pl.Trainer(
+            max_epochs=args.max_epochs,
+            logger=CSVLogger(
+                logging_dir,
+                name=f"iter{iteration}",
+            ),
+        )
         trainer.fit(model_suit)
         # Save the classifier
-        w, b = model.get_weight_and_bias()
-        b = b.item()
-        classifiers.append((w, b))
+
+        if args.visualize:
+            w, b = model.get_weight_and_bias()
+            w = w.view(-1)
+            b = b.item()
+            classifiers.append((w, b))
 
         # Create the next dataset
         X_train = model_suit.delta(X_train, y_train)
         X_val = model_suit.delta(X_val, y_val)
 
-        datasets.append((X_train, y_train))
+        if args.visualize:
+            datasets.append((X_train, y_train))
+
         train_dataloader = DataLoader(
             TensorDataset(X_train, y_train),
             batch_size=args.batch_size,
@@ -280,15 +292,19 @@ def experiment(
         cost_weight += args.cost_weight_addend
         model_suit.delta.cost_weight = cost_weight
 
-        # Update the logger
-        trainer.logger = CSVLogger(logging_dir, name=f"iter{iteration + 1}")
-
     # Visualize the classifiers
-    vis.plot_datasets_and_classifiers(datasets, classifiers, vis_dir)
+    if args.visualize:
+        vis.plot_datasets_and_classifiers(
+            datasets=datasets,
+            classifiers=classifiers,
+            save_path=vis_dir,
+            plot_fraction=args.plot_fraction,
+        )
 
 
 def main():
-    pass
+    args = parse_args()
+    experiment(args)
 
 
 if __name__ == "__main__":
