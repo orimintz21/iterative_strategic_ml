@@ -15,6 +15,40 @@ import dataset_generators as dg
 import visualization as vis
 
 
+class BCEWithLogitsLossPMOne(nn.Module):
+    """Self-defined BCEWithLogitsLoss with target values in {-1, 1}."""
+
+    def __init__(self):
+        super(BCEWithLogitsLossPMOne, self).__init__()
+        self.loss_fn = nn.BCEWithLogitsLoss()
+
+    def forward(self, input, target):
+        return self.loss_fn(input, (target + 1) / 2)
+
+
+class MSELossPOne(nn.Module):
+    """Self-defined MSE loss with target values in {-1, 1}."""
+
+    def __init__(self):
+        super(MSELossPOne, self).__init__()
+        self.loss_fn = nn.MSELoss()
+
+    def forward(self, input, target):
+        return self.loss_fn(input, (target + 1) / 2)
+
+
+class NonLinearModel(nn.Module):
+    def __init__(self, hidden_size: int):
+        super(NonLinearModel, self).__init__()
+        self.fc1 = nn.Linear(2, hidden_size)
+        self.fc2 = nn.Linear(hidden_size, 1)
+
+    def forward(self, x):
+        x = torch.relu(self.fc1(x))
+        x = self.fc2(x)
+        return x
+
+
 def parse_args():
     parser = argparse.ArgumentParser()
     # dataset
@@ -109,6 +143,41 @@ def parse_args():
     parser.add_argument(
         "--elastic_ratio", type=float, default=0.5, help="Elastic net ratio."
     )
+    # non-linear model
+    parser.add_argument(
+        "--non_linear", action="store_true", default=False, help="Use non-linear model."
+    )
+    parser.add_argument(
+        "--hidden_size",
+        type=int,
+        default=2,
+        help="Hidden size for the non-linear model.",
+    )
+    parser.add_argument(
+        "--non_linear_delta_optimizer",
+        type=str,
+        default="adam",
+        help="Optimizer for the non-linear model.",
+    )
+    parser.add_argument(
+        "--non_linear_delta_lr",
+        type=float,
+        default=0.001,
+        help="Learning rate for the non-linear model.",
+    )
+    parser.add_argument(
+        "--non_linear_delta_max_epochs",
+        type=int,
+        default=65,
+        help="Maximum number of epochs for the non-linear model.",
+    )
+    parser.add_argument(
+        "--non_linear_delta_temp",
+        type=float,
+        default=27.0,
+        help="Temperature for the non-linear model.",
+    )
+
     # other
     parser.add_argument("--seed", type=int, default=0, help="Random seed.")
     parser.add_argument(
@@ -121,7 +190,7 @@ def parse_args():
     parser.add_argument(
         "--plot_fraction",
         type=float,
-        default=0.1,
+        default=0.5,
         help="Fraction of datapoints to plot.",
     )
     parser.add_argument(
@@ -131,28 +200,6 @@ def parse_args():
     args = parser.parse_args()
     print("args", args)
     return args
-
-
-class BCEWithLogitsLossPMOne(nn.Module):
-    """Self-defined BCEWithLogitsLoss with target values in {-1, 1}."""
-
-    def __init__(self):
-        super(BCEWithLogitsLossPMOne, self).__init__()
-        self.loss_fn = nn.BCEWithLogitsLoss()
-
-    def forward(self, input, target):
-        return self.loss_fn(input, (target + 1) / 2)
-
-
-class MSELossPOne(nn.Module):
-    """Self-defined MSE loss with target values in {-1, 1}."""
-
-    def __init__(self):
-        super(MSELossPOne, self).__init__()
-        self.loss_fn = nn.MSELoss()
-
-    def forward(self, input, target):
-        return self.loss_fn(input, (target + 1) / 2)
 
 
 def generate_initial_dataset(
@@ -227,7 +274,7 @@ def experiment(
 
     X_train, y_train, X_val, y_val = split_train_val_test(X, y, args.val_ratio)
 
-    datasets: List[Tuple[Tensor, Tensor]] = [(X_train, y_train)]
+    datasets: List[Tuple[Tensor, Tensor]] = [(X_val, y_val)]
     train_dataloader = DataLoader(
         TensorDataset(X_train, y_train),
         batch_size=args.batch_size,
@@ -251,11 +298,38 @@ def experiment(
 
     cost_weight: float = args.start_cost_weight
     num_features = X.shape[1]
-    model = sml.LinearModel(num_features)
     cost = sml.CostNormL2(dim=1)
-    delta = sml.LinearStrategicDelta(
-        strategic_model=model, cost=cost, cost_weight=cost_weight
-    )
+    if args.non_linear:
+        model = NonLinearModel(args.hidden_size)
+        if args.non_linear_delta_optimizer == "adam":
+            delta_optimizer_class = optim.Adam
+        elif args.non_linear_delta_optimizer == "sgd":
+            delta_optimizer_class = optim.SGD
+        elif args.non_linear_delta_optimizer == "adagrad":
+            delta_optimizer_class = optim.Adagrad
+        else:
+            raise ValueError(
+                f"Unknown optimizer for non-linear model: {args.non_linear_delta_optimizer}"
+            )
+        dict_training_params = {
+
+            "optimizer_class": delta_optimizer_class,
+            "optimizer_params": {"lr": args.non_linear_delta_lr},
+            "max_epochs": args.non_linear_delta_max_epochs,
+            "temp": args.non_linear_delta_temp,
+        }
+        delta = sml.NonLinearStrategicDelta(
+            strategic_model=model,
+            cost=cost,
+            cost_weight=cost_weight,
+            training_params=dict_training_params,
+        )
+
+    else:
+        model = sml.LinearModel(num_features)
+        delta = sml.LinearStrategicDelta(
+            strategic_model=model, cost=cost, cost_weight=cost_weight
+        )
     if args.loss_fn == "bce":
         loss_fn = BCEWithLogitsLossPMOne()
     elif args.loss_fn == "mse":
@@ -276,7 +350,7 @@ def experiment(
 
     reg_fn = None
 
-    if args.linear_regulation_fn is not None:
+    if args.linear_regulation_fn is not None and not args.non_linear:
         assert (
             args.linear_regulation_strength is not None
         ), "L1 regularization strength must be specified."
@@ -337,7 +411,7 @@ def experiment(
         trainer.fit(model_suit)
         # Save the classifier
 
-        if args.visualize:
+        if args.visualize and not args.non_linear:
             w, b = model.get_weight_and_bias()
             w = w.view(-1)
             b = b.item()
@@ -348,7 +422,7 @@ def experiment(
         X_val = model_suit.delta(X_val, y_val)
 
         if args.visualize:
-            datasets.append((X_train, y_train))
+            datasets.append((X_val, y_val))
 
         train_dataloader = DataLoader(
             TensorDataset(X_train, y_train),
