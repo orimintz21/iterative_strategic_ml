@@ -26,7 +26,7 @@ def plot_datasets_and_classifiers(
         assert (
             len(datasets) == k + 1
         ), "Number of datasets must be k + 1 where k is the number of classifiers."
-    num_datasets = len(datasets) 
+    num_datasets = len(datasets)
     reds_cmap = cm.get_cmap("Reds")
     blues_cmap = cm.get_cmap("Blues")
     greens_cmap = cm.get_cmap("Greens")
@@ -34,7 +34,6 @@ def plot_datasets_and_classifiers(
     reds = reds_cmap(torch.linspace(0.4, 0.9, num_datasets).numpy())
     blues = blues_cmap(torch.linspace(0.4, 0.9, num_datasets).numpy())
     greens = None
-
 
     fig, ax = plt.subplots(figsize=(10, 8))
 
@@ -124,10 +123,10 @@ def plot_datasets_and_classifiers(
     ]
     if len(classifiers) != 0:
         assert greens is not None
-        legend_elements += [
-            Patch(facecolor=greens[idx], edgecolor="black", label=f"Classifier {idx + 1}")
-            for idx in range(len(classifiers))
-        ]
+        legend_elements.append(
+            Patch(facecolor=greens[-1], edgecolor="black", label="Classifier")
+        )
+
     ax.legend(handles=legend_elements, loc="center left", bbox_to_anchor=(1, 0.5))
 
     fig.tight_layout()

@@ -312,7 +312,6 @@ def experiment(
                 f"Unknown optimizer for non-linear model: {args.non_linear_delta_optimizer}"
             )
         dict_training_params = {
-
             "optimizer_class": delta_optimizer_class,
             "optimizer_params": {"lr": args.non_linear_delta_lr},
             "max_epochs": args.non_linear_delta_max_epochs,
@@ -450,14 +449,16 @@ def experiment(
     if args.visualize:
         if args.plot_name is not None:
             name = f"{args.plot_name}.png"
-            vis_dir = os.path.join(vis_dir, name)
         else:
-            name = f"num_iter_{args.num_iterations}_cost_{args.start_cost_weight}_multiplier_{args.cost_weight_multiplier}_add_{args.cost_weight_addend}_dataset_{args.dataset}.png"
-            vis_dir = os.path.join(vis_dir, name)
+            name = f"num_iter_{args.num_iterations}_cost_{args.start_cost_weight}_multiplier_{args.cost_weight_multiplier}_add_{args.cost_weight_addend}_dataset_{args.dataset}"
+            if args.non_linear:
+                name += f"non_linear_hidden_{args.hidden_size}_temp_{args.non_linear_delta_temp}"
+
+        vis_path = os.path.join(vis_dir, name)
         vis.plot_datasets_and_classifiers(
             datasets=datasets,
             classifiers=classifiers,
-            save_path=vis_dir,
+            save_path=vis_path,
             plot_fraction=args.plot_fraction,
             cost_start=args.start_cost_weight,
             cost_multiplier=args.cost_weight_multiplier,
