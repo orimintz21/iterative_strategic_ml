@@ -19,19 +19,22 @@ def plot_datasets_and_classifiers(
     plot_fraction: float = 1.0,
     title_width: int = 80,  # Max characters per line in the title
 ) -> None:
-    k = len(classifiers)
-    assert (
-        len(datasets) == k + 1
-    ), "Number of datasets must be k + 1 where k is the number of classifiers."
     assert 0 < plot_fraction <= 1, "plot_fraction must be between 0 and 1."
 
+    if len(classifiers) != 0:
+        k = len(classifiers)
+        assert (
+            len(datasets) == k + 1
+        ), "Number of datasets must be k + 1 where k is the number of classifiers."
+    num_datasets = len(datasets) 
     reds_cmap = cm.get_cmap("Reds")
     blues_cmap = cm.get_cmap("Blues")
     greens_cmap = cm.get_cmap("Greens")
 
-    reds = reds_cmap(torch.linspace(0.4, 0.9, k + 1).numpy())
-    blues = blues_cmap(torch.linspace(0.4, 0.9, k + 1).numpy())
-    greens = greens_cmap(torch.linspace(0.4, 0.9, k).numpy())
+    reds = reds_cmap(torch.linspace(0.4, 0.9, num_datasets).numpy())
+    blues = blues_cmap(torch.linspace(0.4, 0.9, num_datasets).numpy())
+    greens = None
+
 
     fig, ax = plt.subplots(figsize=(10, 8))
 
@@ -87,21 +90,24 @@ def plot_datasets_and_classifiers(
                 )
 
     x_vals = torch.linspace(x_min, x_max, 400)
-    for idx, (w, b) in enumerate(classifiers):
-        color = greens[idx]
-        if w[1] != 0:
-            y_vals = (-w[0] * x_vals - b) / w[1]
-            ax.plot(x_vals.numpy(), y_vals.numpy(), color=color, linewidth=2)
-        else:
-            x_line = -b / w[0]
-            ax.axvline(x=x_line.item(), color=color, linewidth=2)
+
+    if len(classifiers) != 0:
+        greens = greens_cmap(torch.linspace(0.4, 0.9, len(classifiers)).numpy())
+        for idx, (w, b) in enumerate(classifiers):
+            color = greens[idx]
+            if w[1] != 0:
+                y_vals = (-w[0] * x_vals - b) / w[1]
+                ax.plot(x_vals.numpy(), y_vals.numpy(), color=color, linewidth=2)
+            else:
+                x_line = -b / w[0]
+                ax.axvline(x=x_line.item(), color=color, linewidth=2)
 
     ax.set_xlim(x_min, x_max)
     ax.set_ylim(y_min, y_max)
 
     # Wrapping the title
     full_title = (
-        f"{k} Iterative Strategic Classification on {dataset_names} Dataset\n"
+        f"{len(datasets) - 1} Iterative Strategic Classification on {dataset_names} Dataset\n"
         f"Cost: {cost_multiplier}^i * {cost_start} + i * {cost_add}"
     )
     wrapped_title = "\n".join(textwrap.wrap(full_title, width=title_width))
@@ -113,10 +119,15 @@ def plot_datasets_and_classifiers(
 
     # Custom legend with color patches
     legend_elements = [
-        Patch(facecolor=greens[-1], edgecolor="black", label="Classifiers"),
         Patch(facecolor=blues[-1], edgecolor="black", label="Positive Labels"),
         Patch(facecolor=reds[-1], edgecolor="black", label="Negative Labels"),
     ]
+    if len(classifiers) != 0:
+        assert greens is not None
+        legend_elements += [
+            Patch(facecolor=greens[idx], edgecolor="black", label=f"Classifier {idx + 1}")
+            for idx in range(len(classifiers))
+        ]
     ax.legend(handles=legend_elements, loc="center left", bbox_to_anchor=(1, 0.5))
 
     fig.tight_layout()
