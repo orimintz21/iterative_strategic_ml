@@ -3,7 +3,7 @@ from torch import Tensor
 import matplotlib.pyplot as plt
 from matplotlib import cm
 from matplotlib.patches import Patch
-from typing import List, Tuple
+from typing import List, Tuple, Optional
 import os
 import textwrap
 
@@ -18,6 +18,7 @@ def plot_datasets_and_classifiers(
     cost_add: float,
     plot_fraction: float = 1.0,
     title_width: int = 80,  # Max characters per line in the title
+    last_zero_one_loss_value: Optional[float] = None,
 ) -> None:
     assert 0 < plot_fraction <= 1, "plot_fraction must be between 0 and 1."
 

@@ -301,10 +301,14 @@ def experiment(
     test_dataloader = train_dataloader
 
     classifiers: List[Tuple[Tensor, float]] = []
-    save_dir = os.path.join(args.save_dir, args.dataset)
+    experiment_name = f"dataset_{args.dataset}_linear_{not args.non_linear}_cost_{args.start_cost_weight}_multiplier_{args.cost_weight_multiplier}_add_{args.cost_weight_addend}"
+    save_dir = os.path.join(args.save_dir, experiment_name)
     os.makedirs(save_dir, exist_ok=True)
-    vis_dir = os.path.join(save_dir, "visualizations")
-    os.makedirs(vis_dir, exist_ok=True)
+    # Save the arguments
+    with open(os.path.join(save_dir, "args.txt"), "w") as f:
+        f.write(str(args) + "\n")
+    
+
 
     cost_weight: float = args.start_cost_weight
     num_features = X.shape[1]
@@ -407,19 +411,20 @@ def experiment(
             test_loader=test_dataloader,
         )
 
-    logging_dir = os.path.join(save_dir, "logs")
+    results = []
+
 
     for iteration in range(args.num_iterations):
         trainer = pl.Trainer(
             max_epochs=args.max_epochs,
-            logger=CSVLogger(
-                logging_dir,
-                name=f"iter{iteration}",
-            ),
+            logger=False
         )
         trainer.fit(model_suit)
-        # Save the classifier
+        last_val_loss = trainer.callback_metrics["val_loss_epoch"].item()
+        last_val_zero_one_loss = trainer.callback_metrics["val_zero_one_loss_epoch"].item()
+        results.append((cost_weight, last_val_loss, last_val_zero_one_loss))
 
+        # Save the classifier
         if args.visualize and not args.non_linear:
             w, b = model.get_weight_and_bias()
             w = w.view(-1)
@@ -455,17 +460,21 @@ def experiment(
         cost_weight += args.cost_weight_addend
         model_suit.delta.cost_weight = cost_weight
 
+
+    # Save the results
+    with open(os.path.join(save_dir, "val_values.txt"), "w") as f:
+        for iter, (cost_weight, val_loss, val_zero_one_loss) in enumerate(results):
+            f.write(f"iter {iter},cost_weigh: {cost_weight} loss:{val_loss} zero_one_loss:{val_zero_one_loss}\n")
+
     # Visualize the classifiers
     if args.visualize:
-        if args.plot_name is not None:
-            name = f"{args.plot_name}.png"
-        else:
-            name = f"num_iter_{args.num_iterations}_cost_{args.start_cost_weight}_multiplier_{args.cost_weight_multiplier}_add_{args.cost_weight_addend}_dataset_{args.dataset}"
-            if args.non_linear:
-                name += f"non_linear_hidden_{args.hidden_size}_temp_{args.non_linear_delta_temp}"
-            name += ".png"
+        name = args.plot_name
+        if args.plot_name is  None:
+            name = f"visualization_{experiment_name}"
 
-        vis_path = os.path.join(vis_dir, name)
+        name += ".png"
+
+        vis_path = os.path.join(save_dir, name)
         vis.plot_datasets_and_classifiers(
             datasets=datasets,
             classifiers=classifiers,
