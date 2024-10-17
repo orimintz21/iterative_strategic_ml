@@ -149,5 +149,7 @@ def generate_gaussian_clusters_dataset(
 
 
 def add_feature_noise(X: Tensor, noise_level: float = 0.1) -> Tensor:
+    if noise_level == 0:
+        return X
     noise = torch.randn_like(X) * noise_level
     return X + noise
