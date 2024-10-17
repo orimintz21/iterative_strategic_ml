@@ -11,6 +11,7 @@ import textwrap
 def plot_datasets_and_classifiers(
     datasets: List[Tuple[Tensor, Tensor]],
     classifiers: List[Tuple[Tensor, float]],
+    itd_classifiers: List[Tuple[Tensor, float]],
     save_path: str,
     dataset_names: str,
     cost_start: float,
@@ -18,7 +19,6 @@ def plot_datasets_and_classifiers(
     cost_add: float,
     plot_fraction: float = 1.0,
     title_width: int = 80,  # Max characters per line in the title
-    last_zero_one_loss_value: Optional[float] = None,
 ) -> None:
     assert 0 < plot_fraction <= 1, "plot_fraction must be between 0 and 1."
 
@@ -31,10 +31,12 @@ def plot_datasets_and_classifiers(
     reds_cmap = cm.get_cmap("Reds")
     blues_cmap = cm.get_cmap("Blues")
     greens_cmap = cm.get_cmap("Greens")
+    purples_camp = cm.get_cmap("Purples")
 
     reds = reds_cmap(torch.linspace(0.4, 0.9, num_datasets).numpy())
     blues = blues_cmap(torch.linspace(0.4, 0.9, num_datasets).numpy())
     greens = None
+    purples = None
 
     fig, ax = plt.subplots(figsize=(10, 8))
 
@@ -102,6 +104,17 @@ def plot_datasets_and_classifiers(
                 x_line = -b / w[0]
                 ax.axvline(x=x_line.item(), color=color, linewidth=2)
 
+    if len(itd_classifiers) != 0:
+        purples = purples_camp(torch.linspace(0.4, 0.9, len(itd_classifiers)).numpy())
+        for idx, (w, b) in enumerate(itd_classifiers):
+            color = purples[idx]
+            if w[1] != 0:
+                y_vals = (-w[0] * x_vals - b) / w[1]
+                ax.plot(x_vals.numpy(), y_vals.numpy(), color=color, linewidth=2)
+            else:
+                x_line = -b / w[0]
+                ax.axvline(x=x_line.item(), color=color, linewidth=2)
+
     ax.set_xlim(x_min, x_max)
     ax.set_ylim(y_min, y_max)
 
@@ -126,6 +139,11 @@ def plot_datasets_and_classifiers(
         assert greens is not None
         legend_elements.append(
             Patch(facecolor=greens[-1], edgecolor="black", label="Classifier")
+        )
+    if len(itd_classifiers) != 0:
+        assert purples is not None
+        legend_elements.append(
+            Patch(facecolor=purples[-1], edgecolor="black", label="ITD Classifier")
         )
 
     ax.legend(handles=legend_elements, loc="center left", bbox_to_anchor=(1, 0.5))
