@@ -152,6 +152,7 @@ You can customize the experiment using various command-line arguments.
 - `--plot_name`: Name of the plot file.
 - `--plot_fraction`: Fraction of data points to plot (default: `0.5`).
 - `--visualize`: Enable visualization of results (default: `True`).
+- `--add_uniq_it`: Adds a uniq id to the save dir (defalue: `False`).
 
 ## Results and Visualization
 
