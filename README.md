@@ -124,6 +124,7 @@ You can customize the experiment using various command-line arguments.
 - `--linear_regulation_fn`: Linear regularization function (`l1`, `l2`, `elastic`). Default: `l1`.
 - `--linear_regulation_strength`: Strength of the linear regularization (default: `0.01`).
 - `--elastic_ratio`: Ratio for elastic net regularization (default: `0.5`).
+- `--pretrain_epochs`: Number of epochs to pretrain the model (default: `0`).
 
 ### Non-Linear Model Parameters
 
@@ -141,6 +142,7 @@ You can customize the experiment using various command-line arguments.
 - `--itd_cost_weight_multiplier`: Cost weight multiplier for ITD agents (default: `1.5`).
 - `--itd_cost_weight_addend`: Cost weight addend for ITD agents (default: `0.0`).
 - `--train_val_update_itd`: Update training and validation data using the ITD delta (default: `False`).
+- `--itd_cost_override`: Override the cost weight for ITD agents with the train's delta (default: `True`).
 - `--model_learn_test_percentage`: Percentage of the test set to use for training the model after each iteration (default: `0.0`).
 - `--test_train_max_epochs`: Maximum epochs for training the model on the test set (default: `20`).
 

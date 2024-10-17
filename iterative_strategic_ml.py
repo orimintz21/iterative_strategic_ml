@@ -112,7 +112,7 @@ def parse_args():
     parser.add_argument(
         "--label_radius",
         type=float,
-        default=None,
+        default=1.0,
         help="Radius that indicates where the label is positive.",
     )
     parser.add_argument(
@@ -169,6 +169,12 @@ def parse_args():
     )
     parser.add_argument(
         "--elastic_ratio", type=float, default=0.5, help="Elastic net ratio."
+    )
+    parser.add_argument(
+        "--pretrain_epochs",
+        type=int,
+        default=0,
+        help="Number of epochs to pretrain the model.",
     )
     # non-linear model
     parser.add_argument(
@@ -228,6 +234,12 @@ def parse_args():
         help="Cost weight addend for 'in the dark' users.",
     )
     parser.add_argument(
+        "--itd_cost_override",
+        action="store_true",
+        default=True,
+        help="Override the cost weight for 'in the dark' users with the train cost weight.",
+    )
+    parser.add_argument(
         "--train_val_update_itd",
         action="store_true",
         default=False,
@@ -262,6 +274,12 @@ def parse_args():
     )
     parser.add_argument(
         "--visualize", action="store_true", default=True, help="Visualize the results."
+    )
+    parser.add_argument(
+        "--add_uniq_id",
+        action="store_true",
+        default=False,
+        help="Add unique id to the save directory.",
     )
 
     args = parser.parse_args()
@@ -366,6 +384,8 @@ def visualize_datasets_and_classifiers(
     experiment_name: str,
     save_dir: str,
 ):
+    if not args.visualize:
+        return
     name = args.plot_name
     if args.plot_name is None:
         name = f"visualization_{experiment_name}"
@@ -418,16 +438,27 @@ def output_experiment(
     experiment_name = f"dataset_{args.dataset}_linear_{not args.non_linear}_cost_{args.start_cost_weight}_multiplier_{args.cost_weight_multiplier}_add_{args.cost_weight_addend}"
     if args.itd:
         experiment_name += f"_itd_cost_{args.itd_start_cost_weight}_multiplier_{args.itd_cost_weight_multiplier}_add_{args.itd_cost_weight_addend}"
+    if args.add_uniq_id:
+        uniq_id = torch.randint(0, 1000, (1,)).item()
+        experiment_name_with_id = experiment_name + f"_id_{uniq_id}"
+        while os.path.exists(os.path.join(args.save_dir, experiment_name_with_id)):
+            uniq_id += 1
+            experiment_name_with_id = experiment_name + f"_id_{uniq_id}"
+
+        experiment_name = experiment_name_with_id
+
     save_dir = os.path.join(args.save_dir, experiment_name)
     os.makedirs(save_dir, exist_ok=True)
+
     # Save the arguments
+    print(f"Saving results to {save_dir}")
     with open(os.path.join(save_dir, "args.txt"), "w") as f:
         f.write(str(args) + "\n")
     # Save the results
-    with open(os.path.join(save_dir, "val_values.txt"), "w") as f:
-        for iter, (cost_weight, val_loss, val_zero_one_loss) in enumerate(results):
+    with open(os.path.join(save_dir, "test_values.txt"), "w") as f:
+        for iter, (cost_weight, test_loss, test_zero_one_loss) in enumerate(results):
             f.write(
-                f"iter {iter},cost_weigh: {cost_weight} loss:{val_loss} zero_one_loss:{val_zero_one_loss}\n"
+                f"iter {iter},cost_weigh: {cost_weight} loss:{test_loss} zero_one_loss:{test_zero_one_loss}\n"
             )
         if len(classifiers) > 0:
             f.write("classifier weights and bias\n")
@@ -446,10 +477,8 @@ def output_experiment(
 def experiment(
     args: argparse.Namespace,
 ):
-    if args.visualize:
-        assert (
-            args.num_features == 2
-        ), "Visualization is only supported for 2D datasets."
+    if args.num_features != 2:
+        args.visualize = False
     # Set random seed
     seed = args.seed
     torch.manual_seed(seed)
@@ -488,7 +517,7 @@ def experiment(
 
     itd_model = None
     itd_delta = None
-    itd_cost_weight = args.itd_start_cost_weight
+    itd_cost_weight = cost_weight if args.itd_cost_override else  args.itd_start_cost_weight
 
     if args.non_linear:
         model = NonLinearModel(args.hidden_size)
@@ -569,6 +598,42 @@ def experiment(
 
     results = []
 
+    if args.pretrain_epochs > 0:
+        trainer = pl.Trainer(max_epochs=args.pretrain_epochs, logger=False)
+        print(f"Pre-training the model for {args.pretrain_epochs} epochs.")
+        pre_train_model_suit = sml.ModelSuit(
+            model=model,
+            delta=sml.IdentityDelta(cost=cost, strategic_model=model),
+            loss_fn=loss_fn,
+            training_params={
+                "optimizer": optimizer,
+                "lr": args.lr,
+            },
+            train_loader=train_dataloader,
+            validation_loader=validation_dataloader,
+            test_loader=test_dataloader,
+        )
+        trainer.fit(pre_train_model_suit)
+        if args.itd:
+            assert itd_model is not None
+            itd_trainer = pl.Trainer(max_epochs=args.pretrain_epochs, logger=False)
+            print(
+                f"Pretraining the 'in the dark' model for {args.pretrain_epochs} epochs."
+            )
+            pre_train_model_suit_itd = sml.ModelSuit(
+                model=itd_model,
+                delta=sml.IdentityDelta(cost=cost, strategic_model=itd_model),
+                loss_fn=loss_fn,
+                training_params={
+                    "optimizer": optimizer,
+                    "lr": args.lr,
+                },
+                train_loader=test_dataloader,
+                validation_loader=validation_dataloader,
+                test_loader=test_dataloader,
+            )
+            itd_trainer.fit(pre_train_model_suit)
+
     for iteration in range(args.num_iterations):
         if args.itd:
             assert itd_model_suit is not None
@@ -589,12 +654,12 @@ def experiment(
         results.append((cost_weight, test_value_loss, test_value_zero_one_loss))
 
         # Save the classifier
-        if args.visualize and not args.non_linear:
+        if not args.non_linear:
             w, b = model.get_weight_and_bias()
             w = w.clone().view(-1)
             b = b.item()
             classifiers.append((w, b))
-            if args.visualize and not args.non_linear:
+            if args.itd:
                 assert itd_model is not None and isinstance(itd_model, sml.LinearModel)
                 itd_w, itd_b = itd_model.get_weight_and_bias()
                 itd_w = itd_w.clone().view(-1)
@@ -627,8 +692,10 @@ def experiment(
             )
             num_samples = X_test.shape[0]
             num_train = int(num_samples * args.model_learn_test_percentage)
-            X_test_train = X_test[:num_train]
-            y_test_train = y_test[:num_train]
+            # select random samples with their labels
+            indices = torch.randperm(num_samples)[:num_train]
+            X_test_train = X_test[indices]
+            y_test_train = y_test[indices]
             model_suit_test_train = sml.ModelSuit(
                 model=model,
                 delta=sml.IdentityDelta(cost=cost, strategic_model=model),
@@ -649,6 +716,7 @@ def experiment(
             trainer_test_train = pl.Trainer(
                 max_epochs=args.test_train_max_epochs, logger=False
             )
+            trainer_test_train.fit(model_suit_test_train)
 
         train_dataloader = DataLoader(
             TensorDataset(X_train, y_train),
@@ -687,9 +755,13 @@ def experiment(
             itd_model_suit.validation_loader = validation_dataloader
             itd_model_suit.test_loader = test_dataloader
             # Update the cost weight for 'in the dark' users
-            itd_cost_weight = (
-                args.itd_cost_weight_multiplier * itd_cost_weight
-            ) + args.itd_cost_weight_addend
+            if args.itd_cost_override:
+                itd_cost_weight = cost_weight
+            else:
+                itd_cost_weight = (
+                    args.itd_cost_weight_multiplier * itd_cost_weight
+                ) + args.itd_cost_weight_addend
+
             itd_model_suit.delta.set_cost_weight(itd_cost_weight)
 
     output_experiment(args, datasets, classifiers, itd_classifiers, results)
